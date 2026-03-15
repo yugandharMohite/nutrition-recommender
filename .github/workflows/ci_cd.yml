@@ -7,9 +7,9 @@ on:
     branches: [ main, master ]
 
 jobs:
-  # ── Stage 1: Test ─────────────────────────────────────────────────────────
-  test:
-    name: Run Tests
+  # ── Stage 1: Linting and Formatting ───────────────────────────────────────
+  lint:
+    name: Code Quality (Lint & Format)
     runs-on: ubuntu-latest
 
     steps:
@@ -20,55 +20,83 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
+          cache: 'pip' # caching pip dependencies
 
-      - name: Cache pip packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('requirements.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+      - name: Install Linting dependencies
+        run: pip install flake8 black isort
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt pytest httpx
+      - name: Run Black
+        run: black --check . || echo "Black formatting issues found, please format your code"
 
-      - name: Run unit tests
-        run: pytest tests/ -v --tb=short
+      - name: Run isort
+        run: isort --check-only . || echo "isort formatting issues found, please format your code"
 
-  # ── Stage 2: Build Docker Image ───────────────────────────────────────────
-  build:
-    name: Build Docker Image
+      - name: Run Flake8
+        run: flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+
+  # ── Stage 2: Test ─────────────────────────────────────────────────────────
+  test:
+    name: Run Unit Tests
     runs-on: ubuntu-latest
-    needs: test   # Only build if tests pass
+    needs: lint
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: 'pip'
 
-      - name: Build Docker image
+      - name: Install dependencies
         run: |
-          docker build -t nutrition-rec-system:${{ github.sha }} .
-          docker tag nutrition-rec-system:${{ github.sha }} nutrition-rec-system:latest
-          echo "✅ Docker image built successfully"
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
 
-      - name: Smoke test container
+      - name: Run unit tests
+        run: pytest tests/ -v --tb=short
+
+  # ── Stage 3: Integration Build and Smoke Test ─────────────────────────────
+  integration:
+    name: Docker Compose Build & Smoke Test
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Build and Start Compose Services
         run: |
-          docker run -d --name test-container \
-            -p 8000:8000 \
-            nutrition-rec-system:latest
-          sleep 15
-          curl --fail http://localhost:8000/ || exit 1
+          # Use compose to build our API and Dashboard (and spin up db/redis if needed)
+          docker-compose up -d --build
+          echo "✅ Services built and running"
+
+      - name: Wait for Services to Initialize
+        run: sleep 20
+
+      - name: Smoke test API
+        run: |
+          curl --fail http://localhost:8000/health || exit 1
           echo "✅ API health check passed"
-          docker stop test-container
 
-  # ── Stage 3: Push to Docker Hub (on main branch only) ─────────────────────
+      - name: Smoke test Dashboard
+        run: |
+          # Streamlit usually returns 200 at / if running
+          curl --fail http://localhost:8501/ || exit 1
+          echo "✅ Dashboard health check passed"
+
+      - name: Stop Compose Services
+        if: always()
+        run: docker-compose down
+
+  # ── Stage 4: Push to Docker Hub (on main branch only) ─────────────────────
   push:
     name: Push to Docker Hub
     runs-on: ubuntu-latest
-    needs: build
+    needs: integration
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
 
     steps:
@@ -84,11 +112,24 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Build and push image
+      # Build and push API image
+      - name: Build and push API image
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: Dockerfile
           push: true
           tags: |
             ${{ secrets.DOCKERHUB_USERNAME }}/nutrition-rec-system:latest
             ${{ secrets.DOCKERHUB_USERNAME }}/nutrition-rec-system:${{ github.sha }}
+
+      # Build and push Dashboard image
+      - name: Build and push Dashboard image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: Dockerfile.dashboard
+          push: true
+          tags: |
+            ${{ secrets.DOCKERHUB_USERNAME }}/nutrition-dashboard:latest
+            ${{ secrets.DOCKERHUB_USERNAME }}/nutrition-dashboard:${{ github.sha }}
