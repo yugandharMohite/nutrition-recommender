@@ -204,8 +204,8 @@ Triggered automatically on:
 - `pull_request` to main/master
 
 ### Required GitHub Secrets:
-- `DOCKER_USERNAME`: Docker Hub username
-- `DOCKER_PASSWORD`: Docker Hub access token
+- `DOCKERHUB_USERNAME`: Docker Hub username
+- `DOCKERHUB_TOKEN`: Docker Hub access token (recommended) or password
 
 ## 📊 BI Integration
 

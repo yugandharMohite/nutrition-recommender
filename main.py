@@ -91,7 +91,7 @@ async def root():
     """Serve the web frontend."""
     html_path = os.path.join("templates", "index.html")
     if os.path.exists(html_path):
-        with open(html_path, "r") as f:
+        with open(html_path, "r", encoding="utf-8") as f:
             return HTMLResponse(content=f.read())
     return HTMLResponse("<h2>Nutrition API is running. Visit <a href='/docs'>/docs</a></h2>")
 

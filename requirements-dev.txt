@@ -31,7 +31,7 @@ pre-commit==3.7.0
 bandit==1.7.5  # Security linter
 
 # Performance Profiling
-line-profiler==4.0.3
+line-profiler>=4.1.2
 memory-profiler==0.61.0
 
 # Type hints
