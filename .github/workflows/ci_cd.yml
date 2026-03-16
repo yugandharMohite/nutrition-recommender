@@ -81,7 +81,7 @@ jobs:
           echo "✅ Services built and running"
 
       - name: Wait for Services to Initialize
-        run: sleep 20
+        run: sleep 45
 
       - name: Smoke test API
         run: |

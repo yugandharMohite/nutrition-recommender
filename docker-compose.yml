@@ -12,10 +12,10 @@ services:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=info
       - ENVIRONMENT=development
-    volumes:
-      - ./models:/app/models
-      - ./Data:/app/Data
-      - ./reports:/app/reports
+#    volumes:
+#      - ./models:/app/models
+#      - ./Data:/app/Data
+#      - ./reports:/app/reports
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     depends_on:
       - nutrition-db
