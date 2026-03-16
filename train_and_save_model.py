@@ -29,12 +29,24 @@ MODELS_DIR = "models"
 os.makedirs(MODELS_DIR, exist_ok=True)
 
 # ── 1. Load dataset ──────────────────────────────────────────
-print("Fetching UCI Obesity dataset...")
-repo   = fetch_ucirepo(id=544)
-X_raw  = repo.data.features
-y_raw  = repo.data.targets
+print("Loading dataset...")
+try:
+    print("   Attempting to fetch UCI Obesity dataset (ID: 544)...")
+    repo = fetch_ucirepo(id=544)
+    X_raw = repo.data.features
+    y_raw = repo.data.targets
+    df = pd.concat([X_raw, y_raw], axis=1)
+    print("   [SUCCESS] Successfully fetched data from UCI.")
+except Exception as e:
+    print(f"   [WARNING] Could not fetch from UCI repo: {e}")
+    local_path = os.path.join("Data", "ObesityDataSet_raw_and_data_sinthetic.csv")
+    if os.path.exists(local_path):
+        print(f"   [INFO] Found local dataset at {local_path}. Loading...")
+        df = pd.read_csv(local_path)
+    else:
+        print("   [ERROR] CRITICAL ERROR: Local dataset file not found and remote fetch failed.")
+        raise FileNotFoundError(f"Dataset not available: {e}")
 
-df = pd.concat([X_raw, y_raw], axis=1)
 df.columns = [
     "Gender","Age","Height","Weight",
     "FamilyHistory","FAVC","FCVC","NCP","CAEC",
@@ -79,9 +91,15 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # ── 4. Train classifier with MLflow ───────────────────────────
-mlflow.set_experiment("Nutrition Recommendation")
+mlflow_enabled = True
+try:
+    mlflow.set_experiment("Nutrition Recommendation")
+    print("   MLflow tracking initialised.")
+except Exception as e:
+    print(f"   [WARNING] MLflow setup failed: {e}. Proceeding without tracking.")
+    mlflow_enabled = False
 
-with mlflow.start_run():
+def run_training():
     print("Training Gradient Boosting classifier...")
     n_estimators = 150
     lr = 0.1
@@ -95,20 +113,38 @@ with mlflow.start_run():
     print(f"   - Accuracy : {acc:.4f}")
     print(f"   - F1 Macro : {f1:.4f}")
 
-    # Log to MLflow
-    mlflow.log_param("n_estimators", n_estimators)
-    mlflow.log_param("learning_rate", lr)
-    mlflow.log_metric("accuracy", acc)
-    mlflow.log_metric("f1_macro", f1)
-    
+    if mlflow_enabled:
+        try:
+            mlflow.log_param("n_estimators", n_estimators)
+            mlflow.log_param("learning_rate", lr)
+            mlflow.log_metric("accuracy", acc)
+            mlflow.log_metric("f1_macro", f1)
+        except Exception as e:
+            print(f"   [WARNING] MLflow logging failed: {e}")
+
     # ── 5. Train KNN for collaborative filtering ──────────────────
     print("Training KNN similarity model...")
     knn = NearestNeighbors(n_neighbors=6, metric="cosine")
     knn.fit(X_scaled)
     
-    # Log models
-    mlflow.sklearn.log_model(clf, "classifier")
-    mlflow.sklearn.log_model(knn, "knn_model")
+    if mlflow_enabled:
+        try:
+            mlflow.sklearn.log_model(clf, "classifier")
+            mlflow.sklearn.log_model(knn, "knn_model")
+        except Exception as e:
+            print(f"   [WARNING] MLflow model logging failed: {e}")
+            
+    return clf, knn, acc, f1
+
+if mlflow_enabled:
+    try:
+        with mlflow.start_run():
+            clf, knn, acc, f1 = run_training()
+    except Exception as e:
+        print(f"   [ERROR] MLflow run failed: {e}. Running training standalone.")
+        clf, knn, acc, f1 = run_training()
+else:
+    clf, knn, acc, f1 = run_training()
 
     # ── 6. Save to CSV for legacy reporting ────────────────────────
     try:
