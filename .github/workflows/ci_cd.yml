@@ -125,9 +125,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          tags: |
-            yugandhar1507/nutrition-rec-system:latest
-            yugandhar1507/nutrition-rec-system:${{ github.sha }}
+          tags: yugandhar1507/nutrition-rec-system:latest,yugandhar1507/nutrition-rec-system:${{ github.sha }}
 
       # Build and push Dashboard image
       - name: Build and push Dashboard image
@@ -136,6 +134,4 @@ jobs:
           context: .
           file: Dockerfile.dashboard
           push: true
-          tags: |
-            ${{ secrets.DOCKERHUB_USERNAME }}/nutrition-dashboard:latest
-            ${{ secrets.DOCKERHUB_USERNAME }}/nutrition-dashboard:${{ github.sha }}
+          tags: yugandhar1507/nutrition-dashboard:latest,yugandhar1507/nutrition-dashboard:${{ github.sha }}
